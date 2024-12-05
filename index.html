@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Enhanced Binary Heap Visualization Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+        }
+        #controls {
+            width: 20%;
+            padding: 20px;
+            border-right: 1px solid #ccc;
+            box-sizing: border-box;
+            background-color: #fff;
+        }
+        #visualization {
+            width: 60%;
+            position: relative;
+            background-color: #eaeaea;
+            overflow: auto;
+        }
+        #explanation {
+            width: 20%;
+            padding: 20px;
+            border-left: 1px solid #ccc;
+            box-sizing: border-box;
+            background-color: #fff;
+            overflow-y: auto;
+        }
+        h2, h3 {
+            text-align: center;
+            color: #333;
+        }
+        input[type="number"], select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #a0a0a0;
+            cursor: not-allowed;
+        }
+        #heapSVG {
+            width: 100%;
+            height: 100%;
+        }
+        .node circle {
+            fill: #69b3a2;
+            stroke: #333;
+            stroke-width: 2px;
+        }
+        .node text {
+            fill: #fff;
+            font-size: 14px;
+            text-anchor: middle;
+            dominant-baseline: middle;
+            pointer-events: none;
+            /* Add a slight stroke to the text for better readability */
+            stroke: black;
+            stroke-width: 0.5px;
+        }
+        .link {
+            fill: none;
+            stroke: #555;
+            stroke-width: 2px;
+        }
+        #explanation p {
+            color: #555;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="controls">
+        <h2>Binary Heap</h2>
+        <label for="heapType">Heap Type:</label>
+        <select id="heapType">
+            <option value="max">Max-Heap</option>
+            <option value="min">Min-Heap</option>
+        </select>
+        <input type="number" id="elementInput" placeholder="Enter a number" />
+        <button id="insertBtn">Insert</button>
+        <button id="deleteBtn">Delete Root</button>
+        <button id="resetBtn">Reset Heap</button>
+    </div>
+
+    <div id="visualization">
+        <svg id="heapSVG"></svg>
+    </div>
+
+    <div id="explanation">
+        <h3>Explanation</h3>
+        <p id="explanationText">Insert or delete elements to see the heap operations.</p>
+    </div>
+
+    <!-- D3.js Library -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+        // Binary Heap Implementation
+        class BinaryHeap {
+            constructor(type = 'max') {
+                this.heap = [];
+                this.type = type; // 'max' or 'min'
+            }
+
+            compare(a, b) {
+                return this.type === 'max' ? a > b : a < b;
+            }
+
+            insert(element) {
+                this.heap.push(element);
+                return this.heapifyUp(this.heap.length - 1);
+            }
+
+            heapifyUp(index) {
+                let steps = [];
+                let currentIndex = index;
+                while (currentIndex > 0) {
+                    let parentIndex = Math.floor((currentIndex - 1) / 2);
+                    if (this.compare(this.heap[currentIndex], this.heap[parentIndex])) {
+                        steps.push({
+                            action: 'swap',
+                            indices: [currentIndex, parentIndex],
+                            heap: [...this.heap]
+                        });
+                        [this.heap[currentIndex], this.heap[parentIndex]] = [this.heap[parentIndex], this.heap[currentIndex]];
+                        currentIndex = parentIndex;
+                    } else {
+                        break;
+                    }
+                }
+                if (steps.length === 0) {
+                    steps.push({
+                        action: 'insert',
+                        index: index,
+                        heap: [...this.heap]
+                    });
+                }
+                return steps;
+            }
+
+            deleteRoot() {
+                if (this.heap.length === 0) return [];
+                const steps = [];
+                if (this.heap.length === 1) {
+                    steps.push({
+                        action: 'delete',
+                        value: this.heap[0],
+                        heap: []
+                    });
+                    this.heap.pop();
+                    return steps;
+                }
+                // Swap root with last element
+                steps.push({
+                    action: 'swap',
+                    indices: [0, this.heap.length - 1],
+                    heap: [...this.heap]
+                });
+                [this.heap[0], this.heap[this.heap.length - 1]] = [this.heap[this.heap.length - 1], this.heap[0]];
+                const removed = this.heap.pop();
+                steps.push({
+                    action: 'delete',
+                    value: removed,
+                    heap: [...this.heap]
+                });
+                // Heapify down
+                steps.push(...this.heapifyDown(0));
+                return steps;
+            }
+
+            heapifyDown(index) {
+                let steps = [];
+                let currentIndex = index;
+                const length = this.heap.length;
+                while (true) {
+                    let left = 2 * currentIndex + 1;
+                    let right = 2 * currentIndex + 2;
+                    let target = currentIndex;
+
+                    if (left < length && this.compare(this.heap[left], this.heap[target])) {
+                        target = left;
+                    }
+                    if (right < length && this.compare(this.heap[right], this.heap[target])) {
+                        target = right;
+                    }
+                    if (target !== currentIndex) {
+                        steps.push({
+                            action: 'swap',
+                            indices: [currentIndex, target],
+                            heap: [...this.heap]
+                        });
+                        [this.heap[currentIndex], this.heap[target]] = [this.heap[target], this.heap[currentIndex]];
+                        currentIndex = target;
+                    } else {
+                        break;
+                    }
+                }
+                return steps;
+            }
+
+            reset() {
+                this.heap = [];
+            }
+
+            setType(type) {
+                if (type !== 'max' && type !== 'min') return;
+                this.type = type;
+                // Rebuild the heap
+                this.buildHeap();
+            }
+
+            buildHeap() {
+                for (let i = Math.floor(this.heap.length / 2) - 1; i >= 0; i--) {
+                    this.heapifyDown(i);
+                }
+            }
+        }
+
+        const heap = new BinaryHeap();
+        let stepsQueue = [];
+        let isProcessing = false;
+
+        const svg = d3.select("#heapSVG");
+        const explanationText = document.getElementById('explanationText');
+
+        const width = document.getElementById('visualization').clientWidth;
+        const height = document.getElementById('visualization').clientHeight;
+        svg.attr("width", width).attr("height", height);
+
+        // Set up D3.js tree layout
+        const treeLayout = d3.tree().size([width - 200, height - 200]);
+
+        // Color scale based on heap type
+        const colorScale = d3.scaleOrdinal()
+            .domain(['max', 'min'])
+            .range(['#69b3a2', '#ff8c00']);
+
+        // Create separate groups for links and nodes to control layering
+        const linksGroup = svg.append("g").attr("class", "links");
+        const nodesGroup = svg.append("g").attr("class", "nodes");
+
+        // Event Listeners
+        document.getElementById('insertBtn').addEventListener('click', () => {
+            const value = parseInt(document.getElementById('elementInput').value);
+            const heapType = document.getElementById('heapType').value;
+            heap.setType(heapType);
+            if (isNaN(value)) {
+                alert("Please enter a valid number.");
+                return;
+            }
+            explanationText.innerHTML = `Inserting ${value} into the ${heapType}-heap.`;
+            const steps = heap.insert(value);
+            stepsQueue.push(...steps);
+            updateVisualization();
+            document.getElementById('elementInput').value = '';
+        });
+
+        document.getElementById('deleteBtn').addEventListener('click', () => {
+            if (heap.heap.length === 0) {
+                alert("Heap is empty.");
+                return;
+            }
+            const heapType = document.getElementById('heapType').value;
+            explanationText.innerHTML = `Deleting the root from the ${heapType}-heap.`;
+            const steps = heap.deleteRoot();
+            stepsQueue.push(...steps);
+            updateVisualization();
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            heap.reset();
+            stepsQueue = [];
+            isProcessing = false;
+            updateVisualization();
+            explanationText.innerHTML = `Heap has been reset. Insert or delete elements to start.`;
+        });
+
+        document.getElementById('heapType').addEventListener('change', (e) => {
+            const type = e.target.value;
+            heap.setType(type);
+            explanationText.innerHTML = `Heap type changed to ${type}-heap. Heap has been rebuilt accordingly.`;
+            updateVisualization();
+        });
+
+        function updateVisualization() {
+            const data = buildTreeData(heap.heap);
+            const root = d3.hierarchy(data);
+            treeLayout(root);
+
+            // LINKS
+            const links = root.links();
+
+            // NODES
+            const nodes = root.descendants();
+
+            // Bind data for links
+            const linkSelection = linksGroup.selectAll('.link')
+                .data(links, d => d.target.data.id);
+
+            // Remove old links
+            linkSelection.exit().remove();
+
+            // Add new links
+            const linkEnter = linkSelection.enter()
+                .append('path')
+                .attr('class', 'link')
+                .attr('d', d => {
+                    return `M${d.source.x + 100},${d.source.y + 100} L${d.source.x + 100},${d.source.y + 100}`;
+                })
+                .attr('stroke', '#555')
+                .attr('stroke-width', 2)
+                .attr('fill', 'none');
+
+            // Update all links
+            const linkUpdate = linkEnter.merge(linkSelection);
+            linkUpdate.transition()
+                .duration(500)
+                .attr('d', d => {
+                    return `M${d.source.x + 100},${d.source.y + 100} L${d.target.x + 100},${d.target.y + 100}`;
+                });
+
+            // Bind data for nodes
+            const nodeSelection = nodesGroup.selectAll('.node')
+                .data(nodes, d => d.data.id);
+
+            // Remove old nodes
+            nodeSelection.exit().remove();
+
+            // Add new nodes
+            const nodeEnter = nodeSelection.enter()
+                .append('g')
+                .attr('class', 'node')
+                .attr('transform', d => `translate(${d.x + 100},${d.y + 100})`)
+                .style("cursor", "pointer")
+                .on("mouseover", function(event, d) {
+                    d3.select(this).select("circle").attr("stroke", "black");
+                })
+                .on("mouseout", function(event, d) {
+                    d3.select(this).select("circle").attr("stroke", "#333");
+                });
+
+            nodeEnter.append('circle')
+                .attr('r', 20)
+                .attr('fill', colorScale(heap.type))
+                .attr('stroke', '#333')
+                .attr('stroke-width', 2);
+
+            nodeEnter.append('text')
+                .attr('dy', '.35em')
+                .text(d => d.data.value)
+                .attr('fill', '#fff')
+                .attr('font-size', '14px')
+                .attr('stroke', 'black') // Adds a thin black stroke to improve readability
+                .attr('stroke-width', 0.5);
+
+            // Update existing nodes
+            const nodeUpdate = nodeEnter.merge(nodeSelection);
+            nodeUpdate.transition()
+                .duration(500)
+                .attr('transform', d => `translate(${d.x + 100},${d.y + 100})`);
+
+            nodeUpdate.select('circle')
+                .transition()
+                .duration(500)
+                .attr('fill', colorScale(heap.type));
+
+            nodeUpdate.select('text')
+                .text(d => d.data.value);
+
+            // Process steps
+            processSteps();
+        }
+
+        function buildTreeData(heapArray) {
+            if (heapArray.length === 0) return {id: 0, value: null};
+            const nodes = heapArray.map((value, index) => ({id: index, value: value}));
+            return buildNode(nodes, 0);
+        }
+
+        function buildNode(nodes, index) {
+            if (index >= nodes.length) return null;
+            const node = {
+                id: nodes[index].id,
+                value: nodes[index].value,
+                children: []
+            };
+            const left = buildNode(nodes, 2 * index + 1);
+            const right = buildNode(nodes, 2 * index + 2);
+            if (left) node.children.push(left);
+            if (right) node.children.push(right);
+            if (node.children.length === 0) delete node.children;
+            return node;
+        }
+
+        function processSteps() {
+            if (isProcessing || stepsQueue.length === 0) return;
+            isProcessing = true;
+
+            const step = stepsQueue.shift();
+            if (!step) {
+                isProcessing = false;
+                return;
+            }
+
+            switch (step.action) {
+                case 'swap':
+                    explanationText.innerHTML += `<br>Swapping elements at indices ${step.indices[0]} and ${step.indices[1]}.`;
+                    break;
+                case 'insert':
+                    explanationText.innerHTML += `<br>Inserted element at index ${step.index}. Heap property maintained.`;
+                    break;
+                case 'delete':
+                    explanationText.innerHTML += `<br>Deleted root element ${step.value}. Heap property restored.`;
+                    break;
+                default:
+                    break;
+            }
+
+            // Update visualization after a delay to show animation
+            setTimeout(() => {
+                updateVisualization();
+                isProcessing = false;
+            }, 1000);
+        }
+
+        // Initial Visualization
+        updateVisualization();
+    </script>
+</body>
+</html>
